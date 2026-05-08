@@ -23,3 +23,12 @@ Thumbs.db
 .env
 venv/
 .venv/
+
+# Claude Code
+.claude/
+
+# Invoice PDF data
+高速费/
+
+# Git hooks (local, not shared)
+.git/hooks/
