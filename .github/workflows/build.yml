@@ -1,0 +1,53 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: pip install PySide6 pdfplumber openpyxl PyMuPDF pytest
+
+      - name: Run tests
+        run: pytest tests/ -v
+
+  build:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build dependencies
+        run: |
+          pip install PySide6 pdfplumber openpyxl PyMuPDF pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller InvoiceApp.spec
+
+      - name: Install NSIS
+        run: choco install nsis -y
+
+      - name: Build installer
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $ver = $tag.TrimStart('v')
+          makensis /DVERSION="$ver" installer.nsi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
+          generate_release_notes: true
