@@ -9,13 +9,17 @@ from PySide6.QtCore import (
     QModelIndex,
     QSettings,
     QSize,
+    QSortFilterProxyModel,
     Qt,
+    QTimer,
     QUrl,
     Slot,
 )
 from PySide6.QtGui import QAction, QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
+    QDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -35,8 +39,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core.exporter import export_to_excel
-from ..core.parser import BASIC_FIELDS, ITEM_FIELDS, flatten_results, scan_pdf_files
+from ..core.exporter import export_to_csv, export_to_excel
+from ..core.parser import (
+    BASIC_FIELDS,
+    ITEM_FIELDS,
+    flatten_results,
+    scan_pdf_files_recursive,
+)
+from .pdf_preview import PdfPreviewLabel
 from .resources import get_icons
 from .worker import ScanWorker
 
@@ -126,6 +136,32 @@ class InvoiceTableModel(QAbstractTableModel):
             if isinstance(val, (int, float)):
                 total += val
         return total
+
+
+class InvoiceFilterProxy(QSortFilterProxyModel):
+    """跨所有可见列进行不区分大小写的文本搜索"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._filter_text = ''
+
+    def set_filter_text(self, text):
+        self._filter_text = text
+        self.invalidateFilter()
+
+    def filterAcceptsRow(self, source_row, source_parent):
+        if not self._filter_text:
+            return True
+        needle = self._filter_text.lower()
+        model = self.sourceModel()
+        if model is None:
+            return True
+        for col in range(model.columnCount()):
+            idx = model.index(source_row, col, source_parent)
+            data = model.data(idx, Qt.DisplayRole)
+            if data and needle in str(data).lower():
+                return True
+        return False
 
 
 class StatsWidget(QFrame):
@@ -228,8 +264,18 @@ class MainWindow(QMainWindow):
     def create_menu_bar(self):
         menu_bar = self.menuBar()
 
-        # 文件菜单 — 仅保留退出
+        # 文件菜单
         file_menu = menu_bar.addMenu('文件(&F)')
+
+        act_browse = QAction('选择文件夹(&O)', self, shortcut='Ctrl+O')
+        act_browse.triggered.connect(self.browse_folder)
+        file_menu.addAction(act_browse)
+        file_menu.addSeparator()
+
+        self.recent_menu = file_menu.addMenu('最近文件夹')
+        self._update_recent_menu()
+        file_menu.addSeparator()
+
         act_exit = QAction('退出(&X)', self, shortcut='Alt+F4')
         act_exit.triggered.connect(self.close)
         file_menu.addAction(act_exit)
@@ -247,11 +293,13 @@ class MainWindow(QMainWindow):
         act_about.triggered.connect(self.show_about)
         help_menu.addAction(act_about)
 
-        # 键盘快捷键（不在菜单中显示，但绑定到主窗口）
-        QAction('选择文件夹', self, shortcut='Ctrl+O', triggered=self.browse_folder)
-        self.act_export = QAction('导出到Excel', self, shortcut='Ctrl+E')
+        # 键盘快捷键
+        self.act_start = QAction('开始识别', self, shortcut='Ctrl+R')
+        self.act_start.setEnabled(False)
+        self.act_start.triggered.connect(self.start_scan)
+        self.act_export = QAction('导出数据', self, shortcut='Ctrl+E')
         self.act_export.setEnabled(False)
-        self.act_export.triggered.connect(self.export_excel)
+        self.act_export.triggered.connect(self.export_data)
 
     # ---- 工具栏 ----
 
@@ -272,15 +320,16 @@ class MainWindow(QMainWindow):
         self.tbtn_start.setFixedHeight(34)
         self.tbtn_start.clicked.connect(self.start_scan)
         self.tbtn_start.setEnabled(False)
+        self.act_start.setEnabled(False)
         toolbar.addWidget(self.tbtn_start)
 
         toolbar.addSeparator()
 
         # 导出Excel按钮 — 用文本
-        self.tbtn_export = QPushButton('📤 导出Excel')
+        self.tbtn_export = QPushButton('📤 导出')
         self.tbtn_export.setObjectName('btnExport')
         self.tbtn_export.setFixedHeight(34)
-        self.tbtn_export.clicked.connect(self.export_excel)
+        self.tbtn_export.clicked.connect(self.export_data)
         self.tbtn_export.setEnabled(False)
         toolbar.addWidget(self.tbtn_export)
 
@@ -319,6 +368,7 @@ class MainWindow(QMainWindow):
 
         # 拖拽支持
         self.folder_edit.dragEnterEvent = self._drag_enter
+        self.folder_edit.dragLeaveEvent = self._drag_leave
         self.folder_edit.dropEvent = self._drop_folder
 
         btn_browse = QPushButton('浏览...')
@@ -335,18 +385,25 @@ class MainWindow(QMainWindow):
         self.stats_widget = StatsWidget()
         main_layout.addWidget(self.stats_widget)
 
-        # 进度条
+        # 进度条 + 取消按钮
         progress_container = QWidget()
         progress_container.setContentsMargins(16, 4, 16, 4)
         progress_layout = QHBoxLayout(progress_container)
         progress_layout.setContentsMargins(0, 0, 0, 0)
         self.progress_bar = QProgressBar()
         self.progress_bar.setFixedHeight(6)
-        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setTextVisible(True)
         self.progress_label = QLabel('')
         self.progress_label.setStyleSheet('color: #757575; font-size: 11px;')
+
+        self.cancel_button = QPushButton('取消')
+        self.cancel_button.setObjectName('btnCancel')
+        self.cancel_button.clicked.connect(self.cancel_scan)
+        self.cancel_button.hide()
+
         progress_layout.addWidget(self.progress_bar, 1)
         progress_layout.addWidget(self.progress_label)
+        progress_layout.addWidget(self.cancel_button)
         main_layout.addWidget(progress_container)
 
         # 表格和详情面板
@@ -358,9 +415,26 @@ class MainWindow(QMainWindow):
         table_layout = QVBoxLayout(table_container)
         table_layout.setContentsMargins(0, 0, 0, 0)
 
+        # 搜索栏（带 300ms 防抖）
+        self.search_bar = QLineEdit()
+        self.search_bar.setObjectName('searchBar')
+        self.search_bar.setPlaceholderText('搜索发票...')
+        self.search_bar.setClearButtonEnabled(True)
+
+        self._search_timer = QTimer()
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(300)
+        self._search_timer.timeout.connect(self._do_search)
+        self.search_bar.textChanged.connect(self._search_timer.start)
+        table_layout.addWidget(self.search_bar)
+
+        # 表格模型 + 筛选代理
         self.table_model = InvoiceTableModel()
+        self.filter_proxy = InvoiceFilterProxy()
+        self.filter_proxy.setSourceModel(self.table_model)
+
         self.table_view = QTableView()
-        self.table_view.setModel(self.table_model)
+        self.table_view.setModel(self.filter_proxy)
         self.table_view.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table_view.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table_view.setAlternatingRowColors(True)
@@ -374,6 +448,7 @@ class MainWindow(QMainWindow):
         self.table_view.setColumnWidth(3, 70)
         self.table_view.setColumnWidth(4, 90)
         self.table_view.clicked.connect(self.on_table_clicked)
+        self.table_view.doubleClicked.connect(self.open_pdf)
 
         table_layout.addWidget(self.table_view)
 
@@ -382,6 +457,8 @@ class MainWindow(QMainWindow):
         detail_container.setObjectName('detailPanel')
         detail_layout = QVBoxLayout(detail_container)
         detail_layout.setContentsMargins(12, 12, 12, 12)
+
+        self.preview_label = PdfPreviewLabel()
 
         detail_title = QLabel('发票详情')
         detail_title.setObjectName('detailTitle')
@@ -392,6 +469,7 @@ class MainWindow(QMainWindow):
         self.detail_browser.setOpenExternalLinks(False)
         self.detail_browser.setMinimumWidth(280)
 
+        detail_layout.addWidget(self.preview_label)
         detail_layout.addWidget(detail_title)
         detail_layout.addWidget(self.detail_browser, 1)
 
@@ -417,11 +495,22 @@ class MainWindow(QMainWindow):
 
     # ---- 拖拽支持 ----
 
+    def _set_drag_hover(self, active):
+        """切换拖拽高亮状态"""
+        self.folder_edit.setProperty('dragHover', active)
+        self.folder_edit.style().unpolish(self.folder_edit)
+        self.folder_edit.style().polish(self.folder_edit)
+
     def _drag_enter(self, event):
         if event.mimeData().hasUrls():
+            self._set_drag_hover(True)
             event.acceptProposedAction()
 
+    def _drag_leave(self, event):
+        self._set_drag_hover(False)
+
     def _drop_folder(self, event):
+        self._set_drag_hover(False)
         urls = event.mimeData().urls()
         if urls:
             path = urls[0].toLocalFile()
@@ -437,33 +526,60 @@ class MainWindow(QMainWindow):
         if folder:
             self.set_folder(folder)
 
+    def _update_recent_menu(self):
+        """重建最近文件夹菜单"""
+        self.recent_menu.clear()
+        folders = self.settings.value('history/folders', [])
+        if not folders:
+            empty = self.recent_menu.addAction('（无）')
+            empty.setEnabled(False)
+            return
+        for f in folders:
+            act = self.recent_menu.addAction(f)
+            act.triggered.connect(lambda checked, path=f: self.set_folder(path))
+
+    def _add_to_recent(self, folder):
+        """将文件夹加入最近列表（最多 10 个）"""
+        folders = self.settings.value('history/folders', [])
+        if folder in folders:
+            folders.remove(folder)
+        folders.insert(0, folder)
+        self.settings.setValue('history/folders', folders[:10])
+        self._update_recent_menu()
+
     def set_folder(self, folder):
         self.folder_edit.setText(folder)
         self.settings.setValue('last_folder', folder)
+        self._add_to_recent(folder)
 
-        # 扫描PDF文件
-        pdf_files = scan_pdf_files(folder)
+        # 扫描PDF文件（递归子文件夹）
+        pdf_files = scan_pdf_files_recursive(folder)
         if not pdf_files:
             QMessageBox.information(self, '提示', '该文件夹下没有找到PDF文件')
             self.tbtn_start.setEnabled(False)
+            self.act_start.setEnabled(False)
             self.stats_widget.update_stats(0, 0, 0, 0)
+            self.setWindowTitle('数电发票识别工具')
             return
 
         self.pdf_files = pdf_files
         self.tbtn_start.setEnabled(True)
+        self.act_start.setEnabled(True)
         self.status_label.setText(f'已找到 {len(pdf_files)} 个PDF文件')
         self.stats_widget.update_stats(len(pdf_files), 0, 0, 0)
+        self.setWindowTitle(f'数电发票识别工具 — {Path(folder).name} ({len(pdf_files)} 个文件)')
 
     @Slot()
     def start_scan(self):
         if not hasattr(self, 'pdf_files') or not self.pdf_files:
             return
 
-        # 清空上次结果
-        self.clear_results()
+        # 清空上次结果（跳过确认）
+        self.clear_results(confirmed=True)
 
         # 禁用按钮
         self.tbtn_start.setEnabled(False)
+        self.act_start.setEnabled(False)
         self.tbtn_browse.setEnabled(False)
         self.folder_edit.setEnabled(False)
 
@@ -471,6 +587,9 @@ class MainWindow(QMainWindow):
         self.progress_bar.setMaximum(len(self.pdf_files))
         self.progress_bar.setValue(0)
         self.progress_label.setText('准备扫描...')
+        self.cancel_button.show()
+        self.cancel_button.setEnabled(True)
+        self.cancel_button.setText('取消')
 
         # 启动后台线程
         self.worker = ScanWorker(self.pdf_files)
@@ -478,23 +597,52 @@ class MainWindow(QMainWindow):
         self.worker.finished.connect(self.on_scan_finished)
         self.worker.start()
 
-    @Slot(int, int, str)
-    def on_scan_progress(self, current, total, pdf_path):
+    @Slot()
+    def cancel_scan(self):
+        """取消扫描，保留已完成的局部结果"""
+        if self.worker and self.worker.isRunning():
+            self.worker.requestInterruption()
+            self.cancel_button.setEnabled(False)
+            self.cancel_button.setText('取消中...')
+            self.status_label.setText('正在取消...')
+
+    @Slot(int, int, str, dict)
+    def on_scan_progress(self, current, total, pdf_path, data):
         self.progress_bar.setValue(current)
         filename = Path(pdf_path).name
         self.progress_label.setText(f'({current}/{total}) {filename}')
         self.status_label.setText(f'正在识别 ({current}/{total})...')
 
+        # 实时更新统计
+        r_total = current
+        r_success = getattr(self, '_scan_success', 0)
+        r_failed = getattr(self, '_scan_failed', 0)
+        r_amount = getattr(self, '_scan_amount', 0.0)
+        if 'error' in data:
+            r_failed += 1
+        else:
+            r_success += 1
+            val = data.get('价税合计')
+            if isinstance(val, (int, float)):
+                r_amount += val
+        self._scan_success = r_success
+        self._scan_failed = r_failed
+        self._scan_amount = r_amount
+        self.stats_widget.update_stats(r_total, r_success, r_failed, r_amount)
+
     @Slot(list)
     def on_scan_finished(self, results):
         self.results = results
         self.table_model.set_results(results)
+        self.filter_proxy.set_filter_text(self.search_bar.text())
 
         # 恢复按钮
         self.tbtn_start.setEnabled(True)
+        self.act_start.setEnabled(True)
         self.tbtn_browse.setEnabled(True)
         self.folder_edit.setEnabled(True)
         self.progress_label.setText('完成')
+        self.cancel_button.hide()
 
         # 更新统计
         total = len(results)
@@ -510,6 +658,15 @@ class MainWindow(QMainWindow):
         self.tbtn_clear.setEnabled(has_data)
         self.act_export.setEnabled(has_success)
         self.act_clear.setEnabled(has_data)
+
+        # 扫描完成提示音
+        QApplication.beep()
+
+        # 更新窗口标题
+        folder_name = Path(self.folder_edit.text()).name if self.folder_edit.text() else ''
+        self.setWindowTitle(
+            f'数电发票识别工具{f" — {folder_name}" if folder_name else ""} ({success} 张发票)'
+        )
 
         # 状态信息
         if failed > 0 and success > 0:
@@ -531,27 +688,47 @@ class MainWindow(QMainWindow):
 
         self.worker = None
 
-    def export_excel(self):
-        """导出到Excel（按项目明细行展开）"""
+    def export_data(self):
+        """导出数据（Excel 或 CSV），按项目明细行展开"""
         success_results = [r for r in self.results if 'error' not in r[0]]
         if not success_results:
             QMessageBox.warning(self, '提示', '没有可导出的数据')
             return
 
-        default_name = f'发票信息_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        # 选择导出字段
+        from .export_dialog import FieldSelectDialog
+
+        dlg = FieldSelectDialog(self)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        selected_fields = dlg.selected_fields()
+        if not selected_fields:
+            QMessageBox.warning(self, '提示', '请至少选择一个导出字段')
+            return
+
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
         folder = self.folder_edit.text() or str(Path.home())
-        output_path, _ = QFileDialog.getSaveFileName(
-            self, '保存Excel文件', str(Path(folder) / default_name), 'Excel文件 (*.xlsx)'
+
+        output_path, fmt = QFileDialog.getSaveFileName(
+            self,
+            '导出数据',
+            str(Path(folder) / f'发票信息_{ts}.xlsx'),
+            'Excel文件 (*.xlsx);;CSV文件 (*.csv)',
         )
         if not output_path:
             return
 
         try:
-            # 展开为每项目明细一行
             flat_results = flatten_results(success_results)
-            export_to_excel(flat_results, output_path)
+            is_csv = output_path.lower().endswith('.csv')
 
-            # 自定义提示框：关闭 + 打开Excel
+            if is_csv:
+                export_to_csv(flat_results, output_path, fields=selected_fields)
+                btn_text = '打开文件'
+            else:
+                export_to_excel(flat_results, output_path, fields=selected_fields)
+                btn_text = '打开Excel'
+
             msg = QMessageBox(self)
             msg.setWindowTitle('导出成功')
             msg.setText(f'已导出 {len(flat_results)} 条记录（{len(success_results)} 张发票）')
@@ -559,7 +736,7 @@ class MainWindow(QMainWindow):
             msg.setIcon(QMessageBox.Information)
 
             msg.addButton('关闭', QMessageBox.AcceptRole)
-            btn_open = msg.addButton('打开Excel', QMessageBox.ActionRole)
+            btn_open = msg.addButton(btn_text, QMessageBox.ActionRole)
 
             msg.exec()
 
@@ -568,28 +745,64 @@ class MainWindow(QMainWindow):
 
             self.status_label.setText(f'已导出到：{output_path}')
         except Exception as e:
-            QMessageBox.critical(self, '导出失败', f'导出Excel时出错：\n{e}')
+            ext = 'CSV' if output_path.lower().endswith('.csv') else 'Excel'
+            QMessageBox.critical(self, '导出失败', f'导出{ext}时出错：\n{e}')
 
-    def clear_results(self):
+    def clear_results(self, confirmed=False):
+        """清空结果（若有关联按钮操作则跳过确认）"""
+        if not confirmed and self.results:
+            reply = QMessageBox.question(
+                self,
+                '确认清空',
+                '确定要清空所有识别结果吗？',
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                return
         self.results.clear()
         self.table_model.set_results([])
+        self.search_bar.clear()
         self.detail_browser.clear()
+        self.preview_label.clear_preview()
         self.progress_bar.setValue(0)
         self.progress_label.setText('')
+        self.cancel_button.hide()
         self.stats_widget.update_stats(0, 0, 0, 0)
         self.tbtn_export.setEnabled(False)
         self.tbtn_clear.setEnabled(False)
         self.act_export.setEnabled(False)
         self.act_clear.setEnabled(False)
         self.status_label.setText('就绪')
+        self.setWindowTitle('数电发票识别工具')
+
+    def _do_search(self):
+        """执行搜索过滤（防抖后调用）"""
+        if hasattr(self, 'filter_proxy'):
+            self.filter_proxy.set_filter_text(self.search_bar.text())
+
+    def open_pdf(self, index):
+        """双击行打开 PDF 文件"""
+        source_index = self.filter_proxy.mapToSource(index)
+        row = source_index.row()
+        result = self.table_model.get_result(row)
+        if result is None:
+            return
+        _, pdf_path = result
+        if os.path.exists(pdf_path):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(pdf_path))
 
     def on_table_clicked(self, index):
         """表格点击 -> 显示详情"""
-        row = index.row()
+        source_index = self.filter_proxy.mapToSource(index)
+        row = source_index.row()
         result = self.table_model.get_result(row)
         if result is None:
             return
         data_dict, pdf_path = result
+
+        # PDF 预览
+        self.preview_label.show_preview(pdf_path)
 
         if 'error' in data_dict:
             html = (
@@ -645,30 +858,60 @@ class MainWindow(QMainWindow):
     def show_about(self):
         from .. import __app_name__, __version__
 
-        QMessageBox.about(
-            self,
-            f'关于 {__app_name__}',
+        msg = QMessageBox(self)
+        msg.setWindowTitle(f'关于 {__app_name__}')
+        msg.setIcon(QMessageBox.Information)
+        msg.setText(
             f'<h3>{__app_name__}</h3>'
             f'<p>版本: {__version__}</p>'
             f'<p>用于识别数电发票（PDF格式）并将信息导出到Excel表格。</p>'
             f'<hr>'
             f'<p style="color:#757575;font-size:11px;">'
-            f'基于 PySide6 + pdfplumber + openpyxl 构建</p>',
+            f'基于 PySide6 + pdfplumber + openpyxl 构建</p>'
+            f'<hr>'
+            f'<p style="margin:4px 0;">'
+            f'作者：<b>陈凡是我</b>'
+            f'</p>'
+            f'<p style="margin:4px 0;">'
+            f'抖音号：<b>seed1994</b>'
+            f'  ·  微信号：<b>jishukong66</b>'
+            f'</p>'
+            f'<p style="margin:0;">'
+            f'GitHub：'
+            f'<a href="https://github.com/metahuber/fapiao-shibie" style="color:#1976d2;">'
+            f'github.com/metahuber/fapiao-shibie</a>'
+            f'</p>'
         )
+        # 让链接可点击
+        label = msg.findChild(QLabel)
+        if label:
+            label.setOpenExternalLinks(True)
+        msg.exec()
 
     def restore_settings(self):
-        """恢复设置（仅窗口大小和位置，不恢复文件夹路径）"""
+        """恢复设置"""
         size = self.settings.value('window/size')
         if size:
             self.resize(size)
         pos = self.settings.value('window/position')
         if pos:
             self.move(pos)
+        # 恢复列宽
+        col_widths = self.settings.value('table/column_widths')
+        if col_widths is not None:
+            for col, w in enumerate(col_widths):
+                if w:
+                    self.table_view.setColumnWidth(col, int(w))
 
     def save_settings(self):
         """保存设置"""
         self.settings.setValue('window/size', self.size())
         self.settings.setValue('window/position', self.pos())
+        # 保存列宽
+        widths = []
+        for col in range(self.table_model.column_count):
+            widths.append(self.table_view.columnWidth(col))
+        self.settings.setValue('table/column_widths', widths)
 
     def closeEvent(self, event):
         if self.worker and self.worker.isRunning():

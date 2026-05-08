@@ -1,4 +1,6 @@
-"""Excel 导出模块 — 扁平格式（每条项目明细一行）"""
+"""导出模块 — 支持 Excel 和 CSV，扁平格式（每条项目明细一行）"""
+
+import csv
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -19,17 +21,17 @@ THIN_BORDER = Border(
 )
 
 
-def export_to_excel(results, output_path):
+def export_to_excel(results, output_path, fields=None):
     """导出到Excel，每条项目明细占一行
 
     results: [(data_dict, pdf_path), ...]
+    fields: 可选，要导出的字段列表 [(显示名, 键名), ...]，默认全部
     """
     wb = Workbook()
     ws = wb.active
     ws.title = '发票信息'
 
-    # 表头 = 基本信息 + 项目明细
-    all_fields = BASIC_FIELDS + ITEM_FIELDS
+    all_fields = fields or (BASIC_FIELDS + ITEM_FIELDS)
     headers = [f[0] for f in all_fields]
     headers.append('文件路径')
 
@@ -106,3 +108,31 @@ def _format_sheet(ws, headers):
     # 自动筛选
     last_col = chr(65 + col_count - 1) if col_count <= 26 else 'Z'
     ws.auto_filter.ref = f'A1:{last_col}{ws.max_row}'
+
+
+def export_to_csv(results, output_path, fields=None):
+    """导出到 CSV，每条项目明细占一行
+
+    results: [(data_dict, pdf_path), ...]
+    fields: 可选，要导出的字段列表 [(显示名, 键名), ...]，默认全部
+    """
+    all_fields = fields or (BASIC_FIELDS + ITEM_FIELDS)
+    headers = [f[0] for f in all_fields] + ['文件路径']
+
+    with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+
+        for data_dict, pdf_path in results:
+            if 'error' in data_dict:
+                continue
+            row = []
+            for _, key in all_fields:
+                value = data_dict.get(key, '')
+                if isinstance(value, float):
+                    value = round(value, 2)
+                row.append(value)
+            row.append(str(pdf_path))
+            writer.writerow(row)
+
+    return output_path

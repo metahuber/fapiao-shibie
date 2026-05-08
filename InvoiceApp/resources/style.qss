@@ -162,6 +162,29 @@ QToolBar QPushButton#btnClear:disabled {
     border-color: #e0e0e0;
 }
 
+/* 取消按钮 */
+QPushButton#btnCancel {
+    background-color: #ffffff;
+    color: #c62828;
+    border: 1px solid #ef9a9a;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: bold;
+}
+QPushButton#btnCancel:hover {
+    background-color: #ffebee;
+    border-color: #e57373;
+}
+QPushButton#btnCancel:pressed {
+    background-color: #ffcdd2;
+}
+QPushButton#btnCancel:disabled {
+    background-color: #f5f5f5;
+    color: #bdbdbd;
+    border-color: #e0e0e0;
+}
+
 /* 文件夹路径选择区域 */
 #folderWidget {
     background-color: #ffffff;
@@ -179,6 +202,12 @@ QToolBar QPushButton#btnClear:disabled {
 #folderPathEdit:focus {
     border-color: #1976d2;
     background-color: #ffffff;
+}
+#folderPathEdit[dragHover="true"] {
+    border-color: #1976d2;
+    background-color: #e3f2fd;
+    border-style: dashed;
+    border-width: 2px;
 }
 #btnBrowse {
     padding: 8px 16px;
@@ -210,14 +239,33 @@ QToolBar QPushButton#btnClear:disabled {
     padding: 0px 4px;
 }
 
+/* 搜索栏 */
+#searchBar {
+    border: 1px solid #d0d0d0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    background-color: #ffffff;
+    color: #424242;
+    font-size: 13px;
+    margin-bottom: 4px;
+}
+#searchBar:focus {
+    border-color: #1976d2;
+}
+#searchBar::placeholder {
+    color: #bdbdbd;
+}
+
 /* 进度条 */
 QProgressBar {
     border: none;
     border-radius: 4px;
     background-color: #e0e0e0;
-    height: 6px;
+    height: 20px;
     text-align: center;
     font-size: 11px;
+    color: #424242;
+    line-height: 20px;
 }
 QProgressBar::chunk {
     background-color: #1976d2;

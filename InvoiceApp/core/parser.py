@@ -74,7 +74,8 @@ def _extract_basic_info(text, lines):
     # 购买方名称 & 销售方名称（同一行格式：买 名称：XXX 售 名称：YYY）
     found_names = False
     for line in lines:
-        if '名称' in line and '售' in line:
+        if '名称' in line and ('买' in line or '购' in line) and '售' in line:
+            # 购买方和销售方在同一行（常见：购买方名称：XXX 售 名称：YYY）
             m_buyer = re.search(r'名称[：:]\s*(.+?)\s+售\s+名称[：:]', line)
             if m_buyer:
                 data['购买方名称'] = m_buyer.group(1).strip()
@@ -170,6 +171,15 @@ def _find_header_columns(header_line):
     result = []
     for i, name in enumerate(col_names):
         matched = False
+        # 第一轮：完全匹配
+        for pattern, std_name in COLUMN_MATCHERS:
+            if pattern == name:
+                result.append((i, std_name))
+                matched = True
+                break
+        if matched:
+            continue
+        # 第二轮：子串匹配
         for pattern, std_name in COLUMN_MATCHERS:
             if pattern in name or name in pattern:
                 result.append((i, std_name))
@@ -221,9 +231,18 @@ def _parse_items_table(lines):
         parts = stripped.split()
         item = {}
         if len(parts) >= expected_cols:
-            # 正好匹配或超出 — 直接映射
-            for col_idx, std_name in col_info:
-                item[std_name] = parts[col_idx] if col_idx < len(parts) else ''
+            extra = len(parts) - expected_cols
+            if extra > 0:
+                # 项目名称中可能包含空格导致分割过多，将多余的 token 合并回第一列
+                first_std_name = col_info[0][1]
+                item[first_std_name] = ' '.join(parts[: extra + 1])
+                for col_idx, std_name in col_info[1:]:
+                    mapped_idx = col_idx + extra
+                    item[std_name] = parts[mapped_idx] if mapped_idx < len(parts) else ''
+            else:
+                # 正好匹配 — 直接映射
+                for col_idx, std_name in col_info:
+                    item[std_name] = parts[col_idx] if col_idx < len(parts) else ''
         elif len(parts) >= 3:
             # 列数不匹配但至少有3列，取前几列
             for col_idx, std_name in col_info[: len(parts)]:
@@ -278,12 +297,33 @@ def process_pdf(pdf_path):
         with pdfplumber.open(pdf_path) as pdf:
             text = ''.join(page.extract_text() or '' for page in pdf.pages)
             if not text.strip():
-                return {'error': '无法提取文本内容'}, pdf_path
+                return {'error': '无法提取文本内容，PDF 可能为扫描件或图片'}, pdf_path
             data = parse_invoice_text(text)
             data['文件名'] = Path(pdf_path).name
             return data, pdf_path
+    except FileNotFoundError:
+        return {'error': '文件未找到，请检查文件路径或文件名'}, pdf_path
     except Exception as e:
-        return {'error': str(e)}, pdf_path
+        err_msg = str(e)
+        friendly = '解析失败'
+        err_lower = err_msg.lower()
+        if (
+            'pdf syntax error' in err_lower
+            or 'pdfsyntaxerror' in err_lower
+            or 'cannot identify image' in err_lower
+        ):
+            friendly = 'PDF 文件格式损坏或无法解析'
+        elif 'password' in err_lower or 'encrypt' in err_lower or 'decrypt' in err_lower:
+            friendly = 'PDF 文件受密码保护，无法打开'
+        elif 'permission' in err_lower or 'access denied' in err_lower:
+            friendly = 'PDF 文件无权限访问'
+        elif 'cannot open' in err_lower or 'not a pdf' in err_lower:
+            friendly = '文件不是有效的 PDF 格式'
+        elif 'out of memory' in err_lower:
+            friendly = '文件过大，内存不足无法解析'
+        else:
+            friendly = f'解析失败：{err_msg[:60]}'
+        return {'error': friendly}, pdf_path
 
 
 def scan_pdf_files(folder_path):
