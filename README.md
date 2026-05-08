@@ -42,7 +42,7 @@ InvoiceApp/          # PySide6 桌面应用（主力版本）
 ├── resources/style.qss # Qt 样式表
 └── __main__.py         # 入口
 
-发票识别工具.py      # tkinter 版（旧版保留）
+legacy_tkinter.py    # tkinter 版（旧版保留）
 pyproject.toml        # 项目元数据
 ruff.toml             # 代码格式配置
 ```

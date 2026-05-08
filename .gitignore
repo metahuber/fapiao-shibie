@@ -28,7 +28,12 @@ venv/
 .claude/
 
 # Invoice PDF data
-高速费/
+highway_toll_data/
 
 # Git hooks (local, not shared)
 .git/hooks/
+
+# PyInstaller build output
+dist/
+*.spec
+

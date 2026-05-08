@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Two versions of the same app coexist:
 
 - **InvoiceApp/** — PySide6 GUI version (active development)
-- **发票识别工具.py** — tkinter version (legacy, retained as reference)
+- **legacy_tkinter.py** — tkinter version (legacy, retained as reference)
 
 ### Core Data Flow
 
@@ -91,7 +91,7 @@ run_pyside6.bat
 pip install PySide6 pdfplumber openpyxl
 
 # Run legacy tkinter version
-python -X utf8 发票识别工具.py
+python -X utf8 legacy_tkinter.py
 ```
 
 ## Git
