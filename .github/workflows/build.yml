@@ -38,16 +38,19 @@ jobs:
         run: pyinstaller InvoiceApp.spec
 
       - name: Install NSIS
-        run: choco install nsis -y
+        run: choco install nsis -y --installargs '/D'
+
+      - name: Check dist directory
+        run: Get-ChildItem -Path dist -Recurse -Depth 0 | Select-Object Name
 
       - name: Build installer
         run: |
           $tag = "${{ github.ref_name }}"
           $ver = $tag.TrimStart('v')
-          makensis /DVERSION="$ver" installer.nsi
+          & "C:\Program Files (x86)\NSIS\makensis.exe" "/DVERSION=$ver" installer.nsi
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.exe
+          files: dist/数电发票识别工具_Setup_v*.exe
           generate_release_notes: true

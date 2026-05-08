@@ -8,8 +8,6 @@ InstallDir "$PROGRAMFILES\数电发票识别工具"
 RequestExecutionLevel admin
 
 ; 界面
-!define MUI_ICON ""
-!define MUI_UNICON ""
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
