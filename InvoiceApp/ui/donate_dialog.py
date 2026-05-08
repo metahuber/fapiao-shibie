@@ -17,35 +17,59 @@ from PySide6.QtWidgets import (
 class DonateDialog(QDialog):
     """显示打赏收款码"""
 
+    _CARD_STYLE = (
+        'background-color: #ffffff; border: 1px solid #e0e0e0;'
+        ' border-radius: 8px; padding: 8px;'
+    )
+    _TITLE_STYLE = (
+        'font-size: 14px; font-weight: bold; color: #212121; margin: 4px 0;'
+    )
+    _SUBTITLE_STYLE = (
+        'font-size: 12px; color: #757575; margin: 0 0 8px 0;'
+    )
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('支持作者')
-        self.setFixedSize(520, 320)
+        self.setFixedSize(540, 380)
+        self.setStyleSheet('background-color: #f5f6fa;')
         self.setup_ui()
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
+        layout.setContentsMargins(24, 20, 24, 16)
 
-        title = QLabel('如果这个工具对你有帮助，欢迎打赏支持作者')
+        # 客气话
+        title = QLabel('感谢您使用本工具 ❤')
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet('font-size: 14px; font-weight: bold; color: #212121; margin: 8px;')
+        title.setStyleSheet(self._TITLE_STYLE)
         layout.addWidget(title)
 
-        # 并排显示两个码
+        subtitle = QLabel(
+            '如果您觉得工具好用，欢迎打赏支持作者持续开发'
+        )
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setStyleSheet(self._SUBTITLE_STYLE)
+        layout.addWidget(subtitle)
+
+        # 两个收款码
         cards = QHBoxLayout()
-        cards.setSpacing(16)
+        cards.setSpacing(20)
+        cards.setContentsMargins(0, 8, 0, 0)
 
         res_dir = Path(__file__).resolve().parent.parent / 'resources'
 
-        for name, label, fname in [
-            ('wechat', '微信收款码', 'weixin_shoukuan.jpg'),
-            ('alipay', '支付宝收款码', 'zhifubao_shoukuan.jpg'),
+        for label, fname in [
+            ('微信收款码', 'weixin_shoukuan.jpg'),
+            ('支付宝收款码', 'zhifubao_shoukuan.jpg'),
         ]:
             card = QWidget()
-            card.setFixedWidth(220)
+            card.setFixedSize(220, 260)
+            card.setStyleSheet(self._CARD_STYLE)
             card_layout = QVBoxLayout(card)
             card_layout.setAlignment(Qt.AlignCenter)
+            card_layout.setContentsMargins(8, 8, 8, 8)
 
             img_path = res_dir / fname
             if img_path.exists():
@@ -58,16 +82,24 @@ class DonateDialog(QDialog):
 
             name_label = QLabel(label)
             name_label.setAlignment(Qt.AlignCenter)
-            name_label.setStyleSheet('color: #757575; font-size: 12px; margin-top: 4px;')
+            name_label.setStyleSheet(
+                'color: #9e9e9e; font-size: 12px; border: none;'
+            )
             card_layout.addWidget(name_label)
 
             cards.addWidget(card)
 
         layout.addLayout(cards)
+        layout.addStretch()
 
         # 关闭按钮
         btn_close = QPushButton('关闭')
         btn_close.setFixedWidth(100)
+        btn_close.setStyleSheet(
+            'background-color: #1976d2; color: #ffffff;'
+            ' border: none; border-radius: 6px; padding: 8px 16px;'
+            ' font-weight: bold;'
+        )
         btn_close.clicked.connect(self.accept)
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
