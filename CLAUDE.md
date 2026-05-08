@@ -4,11 +4,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture Overview
 
-Two versions of the same app coexist:
-
-- **InvoiceApp/** — PySide6 GUI version (active development)
-- **legacy_tkinter.py** — tkinter version (legacy, retained as reference)
-
 ### Core Data Flow
 
 ```
@@ -90,8 +85,6 @@ run_pyside6.bat
 # Install dependencies
 pip install PySide6 pdfplumber openpyxl
 
-# Run legacy tkinter version
-python -X utf8 legacy_tkinter.py
 ```
 
 ## Git
