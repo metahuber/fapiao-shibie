@@ -289,6 +289,10 @@ class MainWindow(QMainWindow):
 
         # 帮助菜单
         help_menu = menu_bar.addMenu('帮助(&H)')
+        act_donate = QAction('支持作者', self)
+        act_donate.triggered.connect(self.show_donate)
+        help_menu.addAction(act_donate)
+        help_menu.addSeparator()
         act_about = QAction('关于', self)
         act_about.triggered.connect(self.show_about)
         help_menu.addAction(act_about)
@@ -854,6 +858,10 @@ class MainWindow(QMainWindow):
             )
 
         self.detail_browser.setHtml(html)
+
+    def show_donate(self):
+        from .donate_dialog import DonateDialog
+        DonateDialog(self).exec()
 
     def show_about(self):
         from .. import __app_name__, __version__

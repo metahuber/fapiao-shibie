@@ -49,3 +49,12 @@ ruff.toml             # 代码格式配置
 ## 技术栈
 
 Python 3.11+、PySide6、pdfplumber、openpyxl、ruff
+
+## 支持作者
+
+如果这个工具对你有帮助，欢迎打赏支持！
+
+| 微信收款码 | 支付宝收款码 |
+|-----------|-------------|
+| ![微信](weixin_shoukuan.jpg) | ![支付宝](zhifubao_shoukuan.jpg) |
+
