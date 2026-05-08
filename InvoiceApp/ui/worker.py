@@ -7,8 +7,8 @@ class ScanWorker(QThread):
     """后台扫描 PDF 的工作线程"""
 
     progress = Signal(int, int, str)  # current, total, filename
-    finished = Signal(list)           # results
-    error = Signal(str)               # error message
+    finished = Signal(list)  # results
+    error = Signal(str)  # error message
 
     def __init__(self, pdf_files, parent=None):
         super().__init__(parent)

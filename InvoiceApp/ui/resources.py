@@ -1,8 +1,9 @@
 """UI 资源模块 - 图标和样式"""
 
 from pathlib import Path
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen
-from PySide6.QtCore import Qt, QSize
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
 

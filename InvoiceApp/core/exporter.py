@@ -1,7 +1,7 @@
 """Excel 导出模块 — 扁平格式（每条项目明细一行）"""
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from .parser import BASIC_FIELDS, ITEM_FIELDS
 
@@ -78,10 +78,23 @@ def _format_sheet(ws, headers):
 
     # 列宽
     widths = {
-        0: 30, 1: 24, 2: 16, 3: 30, 4: 24,
-        5: 30, 6: 24, 7: 20, 8: 12,
-        9: 20, 10: 16, 11: 16, 12: 10,
-        13: 10, 14: 10, 15: 12, 16: 12,
+        0: 30,
+        1: 24,
+        2: 16,
+        3: 30,
+        4: 24,
+        5: 30,
+        6: 24,
+        7: 20,
+        8: 12,
+        9: 20,
+        10: 16,
+        11: 16,
+        12: 10,
+        13: 10,
+        14: 10,
+        15: 12,
+        16: 12,
     }
     for i in range(col_count):
         col_letter = chr(65 + i) if i < 26 else chr(64 + i // 26) + chr(65 + i % 26)

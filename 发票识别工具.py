@@ -1,15 +1,16 @@
 import os
 import re
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
+
 import pdfplumber
 from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
-
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 # ========== 发票解析模块 ==========
+
 
 def parse_invoice_text(text):
     """解析数电发票文本，返回字段字典"""
@@ -128,6 +129,7 @@ def extract_field_safe(data, key, default=''):
 
 # ========== PDF 处理 ==========
 
+
 def process_pdf(pdf_path):
     """处理单个PDF文件，返回解析后的数据"""
     try:
@@ -138,7 +140,7 @@ def process_pdf(pdf_path):
                 if page_text:
                     text += page_text + '\n'
             if not text.strip():
-                return {'error': f'无法提取文本内容'}, pdf_path
+                return {'error': '无法提取文本内容'}, pdf_path
             data = parse_invoice_text(text)
             data['文件名'] = Path(pdf_path).name
             return data, pdf_path
@@ -157,6 +159,7 @@ def scan_pdf_files(folder_path):
 
 # ========== Excel 导出 ==========
 
+
 def export_to_excel(results, output_path):
     """导出结果到Excel文件"""
     wb = Workbook()
@@ -165,13 +168,25 @@ def export_to_excel(results, output_path):
 
     # 定义表头
     headers = [
-        '文件名', '发票号码', '开票日期',
-        '购买方名称', '购买方纳税人识别号',
-        '销售方名称', '销售方纳税人识别号',
-        '项目名称', '数量', '单价', '金额',
-        '价税合计', '价税合计大写',
-        '车牌号', '车辆类型', '通行日期起止',
-        '入出口站', '开票人', '文件路径'
+        '文件名',
+        '发票号码',
+        '开票日期',
+        '购买方名称',
+        '购买方纳税人识别号',
+        '销售方名称',
+        '销售方纳税人识别号',
+        '项目名称',
+        '数量',
+        '单价',
+        '金额',
+        '价税合计',
+        '价税合计大写',
+        '车牌号',
+        '车辆类型',
+        '通行日期起止',
+        '入出口站',
+        '开票人',
+        '文件路径',
     ]
 
     # 样式
@@ -184,7 +199,7 @@ def export_to_excel(results, output_path):
         left=Side(style='thin'),
         right=Side(style='thin'),
         top=Side(style='thin'),
-        bottom=Side(style='thin')
+        bottom=Side(style='thin'),
     )
 
     # 写入表头
@@ -216,7 +231,7 @@ def export_to_excel(results, output_path):
             extract_field_safe(data, '通行日期起止'),
             extract_field_safe(data, '入出口站'),
             extract_field_safe(data, '开票人'),
-            str(pdf_path)
+            str(pdf_path),
         ]
         for col, value in enumerate(values, 1):
             cell = ws.cell(row=row_idx, column=col, value=value)
@@ -226,13 +241,25 @@ def export_to_excel(results, output_path):
 
     # 设置列宽
     col_widths = {
-        1: 30, 2: 24, 3: 16,
-        4: 30, 5: 24,
-        6: 30, 7: 24,
-        8: 18, 9: 8, 10: 10, 11: 10,
-        12: 10, 13: 20,
-        14: 12, 15: 10, 16: 28,
-        17: 30, 18: 12, 19: 50
+        1: 30,
+        2: 24,
+        3: 16,
+        4: 30,
+        5: 24,
+        6: 30,
+        7: 24,
+        8: 18,
+        9: 8,
+        10: 10,
+        11: 10,
+        12: 10,
+        13: 20,
+        14: 12,
+        15: 10,
+        16: 28,
+        17: 30,
+        18: 12,
+        19: 50,
     }
     for col, width in col_widths.items():
         ws.column_dimensions[chr(64 + col) if col <= 26 else 'A' + chr(64 + col - 26)].width = width
@@ -248,6 +275,7 @@ def export_to_excel(results, output_path):
 
 
 # ========== GUI ==========
+
 
 class InvoiceApp:
     def __init__(self, root):
@@ -287,10 +315,14 @@ class InvoiceApp:
 
         ttk.Label(frame_actions, text='扫描结果：').pack(side=tk.LEFT)
 
-        self.btn_export = ttk.Button(frame_actions, text='导出到Excel', command=self.export_excel, state=tk.DISABLED)
+        self.btn_export = ttk.Button(
+            frame_actions, text='导出到Excel', command=self.export_excel, state=tk.DISABLED
+        )
         self.btn_export.pack(side=tk.RIGHT, padx=2)
 
-        self.btn_clear = ttk.Button(frame_actions, text='清空结果', command=self.clear_results, state=tk.DISABLED)
+        self.btn_clear = ttk.Button(
+            frame_actions, text='清空结果', command=self.clear_results, state=tk.DISABLED
+        )
         self.btn_clear.pack(side=tk.RIGHT, padx=2)
 
         # 进度条
@@ -368,27 +400,31 @@ class InvoiceApp:
             if 'error' in data:
                 status = '识别失败'
                 error_count += 1
-                self.tree.insert('', tk.END, values=(
-                    filename, '', '', '', status
-                ))
+                self.tree.insert('', tk.END, values=(filename, '', '', '', status))
             else:
                 status = '成功'
                 success_count += 1
                 self.results.append((data, pdf_path))
-                self.tree.insert('', tk.END, values=(
-                    filename,
-                    data.get('发票号码', ''),
-                    data.get('价税合计', ''),
-                    data.get('车牌号', ''),
-                    status
-                ))
+                self.tree.insert(
+                    '',
+                    tk.END,
+                    values=(
+                        filename,
+                        data.get('发票号码', ''),
+                        data.get('价税合计', ''),
+                        data.get('车牌号', ''),
+                        status,
+                    ),
+                )
 
             self.progress['value'] = i + 1
-            self.status_text.set(f'正在识别 ({i+1}/{total}): {filename}')
+            self.status_text.set(f'正在识别 ({i + 1}/{total}): {filename}')
             self.root.update_idletasks()
 
         # 更新状态
-        self.status_text.set(f'扫描完成：共 {total} 个文件，成功 {success_count} 个，失败 {error_count} 个')
+        self.status_text.set(
+            f'扫描完成：共 {total} 个文件，成功 {success_count} 个，失败 {error_count} 个'
+        )
 
         if self.results:
             self.btn_export.config(state=tk.NORMAL)
@@ -409,7 +445,7 @@ class InvoiceApp:
             initialdir=folder,
             initialfile=default_name,
             defaultextension='.xlsx',
-            filetypes=[('Excel文件', '*.xlsx')]
+            filetypes=[('Excel文件', '*.xlsx')],
         )
 
         if not output_path:
@@ -452,7 +488,7 @@ class InvoiceApp:
 
 def main():
     root = tk.Tk()
-    app = InvoiceApp(root)
+    InvoiceApp(root)
     root.mainloop()
 
 

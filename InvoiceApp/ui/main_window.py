@@ -1,27 +1,44 @@
 """主窗口"""
 
 import os
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QLineEdit, QTableView,
-    QProgressBar, QStatusBar, QMenuBar, QToolBar,
-    QMessageBox, QHeaderView, QAbstractItemView,
-    QFileDialog, QApplication, QFrame, QSplitter,
-    QTextBrowser, QSizePolicy
-)
 from PySide6.QtCore import (
-    Qt, QAbstractTableModel, QModelIndex,
-    QSettings, QUrl, Signal, Slot, QSize
+    QAbstractTableModel,
+    QModelIndex,
+    QSettings,
+    QSize,
+    Qt,
+    QUrl,
+    Slot,
 )
-from PySide6.QtGui import QAction, QIcon, QFont, QColor, QDesktopServices
+from PySide6.QtGui import QAction, QColor, QDesktopServices
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSplitter,
+    QStatusBar,
+    QTableView,
+    QTextBrowser,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
+)
 
-from ..core.parser import scan_pdf_files, BASIC_FIELDS, ITEM_FIELDS, flatten_results
 from ..core.exporter import export_to_excel
+from ..core.parser import BASIC_FIELDS, ITEM_FIELDS, flatten_results, scan_pdf_files
+from .resources import get_icons
 from .worker import ScanWorker
-from .resources import load_style, get_icons
 
 
 class InvoiceTableModel(QAbstractTableModel):
@@ -76,7 +93,7 @@ class InvoiceTableModel(QAbstractTableModel):
         if role == Qt.BackgroundRole and index.column() == 0:
             if 'error' in data_dict:
                 return QColor(255, 235, 238)  # 淡红背景
-            return QColor(232, 245, 233)       # 淡绿背景
+            return QColor(232, 245, 233)  # 淡绿背景
 
         return None
 
@@ -415,8 +432,7 @@ class MainWindow(QMainWindow):
 
     def browse_folder(self):
         folder = QFileDialog.getExistingDirectory(
-            self, '选择包含PDF发票的文件夹',
-            self.settings.value('last_folder', '')
+            self, '选择包含PDF发票的文件夹', self.settings.value('last_folder', '')
         )
         if folder:
             self.set_folder(folder)
@@ -478,7 +494,7 @@ class MainWindow(QMainWindow):
         self.tbtn_start.setEnabled(True)
         self.tbtn_browse.setEnabled(True)
         self.folder_edit.setEnabled(True)
-        self.progress_label.setText(f'完成')
+        self.progress_label.setText('完成')
 
         # 更新统计
         total = len(results)
@@ -501,28 +517,23 @@ class MainWindow(QMainWindow):
                 f'扫描完成：共 {total} 个，成功 {success} 个，失败 {failed} 个'
             )
             QMessageBox.warning(
-                self, '扫描完成',
-                f'扫描完成！\n成功: {success}  失败: {failed}\n'
-                f'金额合计: ¥{amount:.2f}'
+                self,
+                '扫描完成',
+                f'扫描完成！\n成功: {success}  失败: {failed}\n金额合计: ¥{amount:.2f}',
             )
         elif success > 0:
-            self.status_label.setText(
-                f'扫描完成：{total} 个全部识别成功，金额合计 ¥{amount:.2f}'
-            )
+            self.status_label.setText(f'扫描完成：{total} 个全部识别成功，金额合计 ¥{amount:.2f}')
         else:
             self.status_label.setText('扫描完成：全部失败')
             QMessageBox.critical(
-                self, '扫描失败',
-                '所有文件识别失败，请检查PDF是否为有效的数电发票格式'
+                self, '扫描失败', '所有文件识别失败，请检查PDF是否为有效的数电发票格式'
             )
 
         self.worker = None
 
     def export_excel(self):
         """导出到Excel（按项目明细行展开）"""
-        success_results = [
-            r for r in self.results if 'error' not in r[0]
-        ]
+        success_results = [r for r in self.results if 'error' not in r[0]]
         if not success_results:
             QMessageBox.warning(self, '提示', '没有可导出的数据')
             return
@@ -530,9 +541,7 @@ class MainWindow(QMainWindow):
         default_name = f'发票信息_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
         folder = self.folder_edit.text() or str(Path.home())
         output_path, _ = QFileDialog.getSaveFileName(
-            self, '保存Excel文件',
-            str(Path(folder) / default_name),
-            'Excel文件 (*.xlsx)'
+            self, '保存Excel文件', str(Path(folder) / default_name), 'Excel文件 (*.xlsx)'
         )
         if not output_path:
             return
@@ -545,14 +554,11 @@ class MainWindow(QMainWindow):
             # 自定义提示框：关闭 + 打开Excel
             msg = QMessageBox(self)
             msg.setWindowTitle('导出成功')
-            msg.setText(
-                f'已导出 {len(flat_results)} 条记录'
-                f'（{len(success_results)} 张发票）'
-            )
+            msg.setText(f'已导出 {len(flat_results)} 条记录（{len(success_results)} 张发票）')
             msg.setInformativeText(str(output_path))
             msg.setIcon(QMessageBox.Information)
 
-            btn_close = msg.addButton('关闭', QMessageBox.AcceptRole)
+            msg.addButton('关闭', QMessageBox.AcceptRole)
             btn_open = msg.addButton('打开Excel', QMessageBox.ActionRole)
 
             msg.exec()
@@ -637,15 +643,17 @@ class MainWindow(QMainWindow):
         self.detail_browser.setHtml(html)
 
     def show_about(self):
-        from .. import __version__, __app_name__
+        from .. import __app_name__, __version__
+
         QMessageBox.about(
-            self, f'关于 {__app_name__}',
+            self,
+            f'关于 {__app_name__}',
             f'<h3>{__app_name__}</h3>'
             f'<p>版本: {__version__}</p>'
             f'<p>用于识别数电发票（PDF格式）并将信息导出到Excel表格。</p>'
             f'<hr>'
             f'<p style="color:#757575;font-size:11px;">'
-            f'基于 PySide6 + pdfplumber + openpyxl 构建</p>'
+            f'基于 PySide6 + pdfplumber + openpyxl 构建</p>',
         )
 
     def restore_settings(self):

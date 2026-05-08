@@ -2,8 +2,8 @@
 
 import re
 from pathlib import Path
-import pdfplumber
 
+import pdfplumber
 
 # ==================== 字段定义 ====================
 
@@ -55,6 +55,7 @@ COLUMN_MATCHERS = [
 
 
 # ==================== 基本信息解析 ====================
+
 
 def _extract_basic_info(text, lines):
     """提取发票基本信息"""
@@ -148,6 +149,7 @@ def _extract_basic_info(text, lines):
 
 # ==================== 项目明细解析 ====================
 
+
 def _find_header_columns(header_line):
     """从表头行识别列名及对应的标准名称
 
@@ -224,7 +226,7 @@ def _parse_items_table(lines):
                 item[std_name] = parts[col_idx] if col_idx < len(parts) else ''
         elif len(parts) >= 3:
             # 列数不匹配但至少有3列，取前几列
-            for col_idx, std_name in col_info[:len(parts)]:
+            for col_idx, std_name in col_info[: len(parts)]:
                 item[std_name] = parts[col_idx]
 
         if item and item.get('项目名称', '').strip():
@@ -234,6 +236,7 @@ def _parse_items_table(lines):
 
 
 # ==================== 主解析函数 ====================
+
 
 def parse_invoice_text(text):
     """解析数电发票文本
@@ -263,6 +266,7 @@ def parse_invoice_text(text):
 
 # ==================== 文件处理 ====================
 
+
 def process_pdf(pdf_path):
     """处理单个PDF文件，返回 (data_dict, pdf_path)
 
@@ -284,20 +288,16 @@ def process_pdf(pdf_path):
 
 def scan_pdf_files(folder_path):
     """扫描文件夹下所有PDF文件"""
-    return [
-        str(p) for p in sorted(Path(folder_path).iterdir())
-        if p.suffix.lower() == '.pdf'
-    ]
+    return [str(p) for p in sorted(Path(folder_path).iterdir()) if p.suffix.lower() == '.pdf']
 
 
 def scan_pdf_files_recursive(folder_path):
     """递归扫描文件夹下所有PDF文件"""
-    return [
-        str(p) for p in sorted(Path(folder_path).rglob('*.pdf'))
-    ]
+    return [str(p) for p in sorted(Path(folder_path).rglob('*.pdf'))]
 
 
 # ==================== 结果展开 ====================
+
 
 def flatten_results(results):
     """将解析结果展开为导出用的一行行数据
@@ -327,4 +327,3 @@ def flatten_results(results):
                 row.update(item)
                 flat.append((row, pdf_path))
     return flat
-
