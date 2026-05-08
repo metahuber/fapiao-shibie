@@ -35,6 +35,5 @@ highway_toll_data/
 
 # PyInstaller build output
 dist/
-# 允许项目根目录的打包配置
-!InvoiceApp.spec
+*.spec
 
