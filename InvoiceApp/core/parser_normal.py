@@ -70,12 +70,15 @@ def _extract_header_info(text, lines):
         data['机器编号'] = m.group(1)
 
     # --- 校验码 ---
-    m = re.search(r'校[验]\s*[验]\s*[码]\s*[：:]?\s*([\d\s]{14,})', text)
+    m = re.search(r'校\s*验\s*码\s*[：:]?\s*([\d]+(?:[\s\d]*\d)?)', text)
     if m:
         data['校验码'] = ''.join(m.group(1).split())
     if '校验码' not in data:
         # 机器编号行后面的20位数字（校验码）
-        m = re.search(r'机器编号\s*[：:]\s*\d+\s*(?:[一-鿿]+\s*税务[局]\s*)?([\d\s]{14,})', text)
+        m = re.search(
+            r'机器编号\s*[：:]\s*\d+(?:\s*[一-鿿]+\s*税务[局]\s*)?\s*(\d{4,5}(?:[^\S\n]+\d{4,5}){3,4})',
+            text,
+        )
         if m:
             raw = m.group(1).strip()
             parts = raw.split()
