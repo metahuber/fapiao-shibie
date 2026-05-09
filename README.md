@@ -55,9 +55,9 @@ Python 3.11+、PySide6、pdfplumber、openpyxl、ruff
 如果这个工具对你有帮助，欢迎打赏支持！
 
 <p align="center">
-  <img src="weixin_shoukuan.jpg" width="200" alt="微信收款码">
+  <img src="weixin_shoukuan.png" width="200" alt="微信收款码">
   &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="zhifubao_shoukuan.jpg" width="200" alt="支付宝收款码">
+  <img src="zhifubao_shoukuan.png" width="200" alt="支付宝收款码">
 </p>
 <p align="center">微信收款码&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;支付宝收款码</p>
 

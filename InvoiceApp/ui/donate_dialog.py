@@ -61,8 +61,8 @@ class DonateDialog(QDialog):
         res_dir = Path(__file__).resolve().parent.parent / 'resources'
 
         for label, fname in [
-            ('微信收款码', 'weixin_shoukuan.jpg'),
-            ('支付宝收款码', 'zhifubao_shoukuan.jpg'),
+            ('微信收款码', 'weixin_shoukuan.png'),
+            ('支付宝收款码', 'zhifubao_shoukuan.png'),
         ]:
             card = QWidget()
             card.setFixedSize(220, 260)
