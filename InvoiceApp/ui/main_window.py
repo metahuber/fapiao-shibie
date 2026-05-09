@@ -39,11 +39,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core.exporter import export_to_csv, export_to_excel
+from ..core.exporter import export_to_csv, export_to_excel_grouped
 from ..core.parser import (
     BASIC_FIELDS,
     ITEM_FIELDS,
-    flatten_results,
+    merge_results,
     scan_pdf_files_recursive,
 )
 from .pdf_preview import PdfPreviewLabel
@@ -60,6 +60,7 @@ class InvoiceTableModel(QAbstractTableModel):
         # 表格显示的关键字段
         self._display_fields = [
             ('文件名', '文件名'),
+            ('发票类型', '发票类型'),
             ('发票号码', '发票号码'),
             ('开票日期', '开票日期'),
             ('购买方名称', '购买方名称'),
@@ -83,8 +84,16 @@ class InvoiceTableModel(QAbstractTableModel):
             return None
         data_dict, _ = self._data[index.row()]
         _, key = self._display_fields[index.column()]
+        is_error = 'error' in data_dict
 
         if role == Qt.DisplayRole:
+            # 失败的发票：第一列显示文件名，第二列显示错误原因
+            if is_error:
+                if key == '文件名':
+                    return data_dict.get('文件名', str(index.row() + 1))
+                if key in ('发票类型',):
+                    return f'❌ {data_dict.get("error", "识别失败")}'
+                return ''
             value = data_dict.get(key, '')
             # 格式化价税合计显示
             if key == '价税合计' and isinstance(value, (int, float)):
@@ -98,10 +107,12 @@ class InvoiceTableModel(QAbstractTableModel):
 
         if role == Qt.ToolTipRole:
             value = data_dict.get(key, '')
+            if is_error and not value:
+                return data_dict.get('error', '')
             return str(value) if value else None
 
         if role == Qt.BackgroundRole and index.column() == 0:
-            if 'error' in data_dict:
+            if is_error:
                 return QColor(255, 235, 238)  # 淡红背景
             return QColor(232, 245, 233)  # 淡绿背景
 
@@ -248,14 +259,20 @@ class MainWindow(QMainWindow):
 
         self.setup_window()
         self.create_menu_bar()
+        # 文件夹栏（插入到主工具栏上方）
+        folder_bar = self._create_folder_bar()
+        self.addToolBar(folder_bar)
+        # 主操作工具栏（开始识别 | 导出 | 清空）
         self.create_toolbar()
+        # 将文件夹栏移到主工具栏前面
+        self.insertToolBar(self.findChild(QToolBar, 'mainToolBar'), folder_bar)
         self.create_central_widget()
         self.create_status_bar()
         self.connect_signals()
         self.restore_settings()
 
     def setup_window(self):
-        self.setWindowTitle('数电发票识别工具')
+        self.setWindowTitle('发票识别工具')
         self.setWindowIcon(self.icons['app'])
         self.resize(1100, 720)
 
@@ -308,17 +325,13 @@ class MainWindow(QMainWindow):
     # ---- 工具栏 ----
 
     def create_toolbar(self):
+        """创建主操作工具栏（开始识别 | 导出 | 清空）"""
         toolbar = QToolBar('主工具栏')
+        toolbar.setObjectName('mainToolBar')
         toolbar.setMovable(False)
         toolbar.setIconSize(QSize(18, 18))
         self.addToolBar(toolbar)
 
-        self.tbtn_browse = toolbar.addAction(self.icons['folder'], '选择文件夹')
-        self.tbtn_browse.triggered.connect(self.browse_folder)
-
-        toolbar.addSeparator()
-
-        # 开始识别按钮 — 用文本，不用图标（避免渲染兼容问题）
         self.tbtn_start = QPushButton('▶ 开始识别')
         self.tbtn_start.setObjectName('btnStart')
         self.tbtn_start.setFixedHeight(34)
@@ -329,7 +342,6 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        # 导出Excel按钮 — 用文本
         self.tbtn_export = QPushButton('📤 导出')
         self.tbtn_export.setObjectName('btnExport')
         self.tbtn_export.setFixedHeight(34)
@@ -346,31 +358,17 @@ class MainWindow(QMainWindow):
         self.tbtn_clear.setEnabled(False)
         toolbar.addWidget(self.tbtn_clear)
 
-    # ---- 中央控件 ----
-
-    def create_central_widget(self):
-        central = QWidget()
-        self.setCentralWidget(central)
-        main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-
-        # 文件夹路径
-        folder_widget = QWidget()
-        folder_widget.setObjectName('folderWidget')
-        folder_layout = QHBoxLayout(folder_widget)
-        folder_layout.setContentsMargins(16, 12, 16, 12)
-
-        lbl = QLabel('文件夹：')
-        lbl.setStyleSheet('font-size: 13px; color: #424242;')
+    def _create_folder_bar(self):
+        """创建文件夹路径栏（放在工具栏上方）"""
+        folder_toolbar = QToolBar('文件夹')
+        folder_toolbar.setMovable(False)
 
         self.folder_edit = QLineEdit()
         self.folder_edit.setObjectName('folderPathEdit')
-        self.folder_edit.setPlaceholderText('点击"选择文件夹"或直接拖拽文件夹到此处...')
+        self.folder_edit.setPlaceholderText('选择文件夹或直接拖拽到此处...')
         self.folder_edit.setReadOnly(True)
         self.folder_edit.setAcceptDrops(True)
-
-        # 拖拽支持
+        self.folder_edit.setMinimumWidth(400)
         self.folder_edit.dragEnterEvent = self._drag_enter
         self.folder_edit.dragLeaveEvent = self._drag_leave
         self.folder_edit.dropEvent = self._drop_folder
@@ -379,11 +377,18 @@ class MainWindow(QMainWindow):
         btn_browse.setObjectName('btnBrowse')
         btn_browse.clicked.connect(self.browse_folder)
 
-        folder_layout.addWidget(lbl)
-        folder_layout.addWidget(self.folder_edit, 1)
-        folder_layout.addWidget(btn_browse)
+        folder_toolbar.addWidget(self.folder_edit)
+        folder_toolbar.addWidget(btn_browse)
+        return folder_toolbar
 
-        main_layout.addWidget(folder_widget)
+    # ---- 中央控件 ----
+
+    def create_central_widget(self):
+        central = QWidget()
+        self.setCentralWidget(central)
+        main_layout = QVBoxLayout(central)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
         # 统计面板
         self.stats_widget = StatsWidget()
@@ -563,7 +568,7 @@ class MainWindow(QMainWindow):
             self.tbtn_start.setEnabled(False)
             self.act_start.setEnabled(False)
             self.stats_widget.update_stats(0, 0, 0, 0)
-            self.setWindowTitle('数电发票识别工具')
+            self.setWindowTitle('发票识别工具')
             return
 
         self.pdf_files = pdf_files
@@ -584,7 +589,6 @@ class MainWindow(QMainWindow):
         # 禁用按钮
         self.tbtn_start.setEnabled(False)
         self.act_start.setEnabled(False)
-        self.tbtn_browse.setEnabled(False)
         self.folder_edit.setEnabled(False)
 
         # 进度条
@@ -643,7 +647,6 @@ class MainWindow(QMainWindow):
         # 恢复按钮
         self.tbtn_start.setEnabled(True)
         self.act_start.setEnabled(True)
-        self.tbtn_browse.setEnabled(True)
         self.folder_edit.setEnabled(True)
         self.progress_label.setText('完成')
         self.cancel_button.hide()
@@ -693,22 +696,14 @@ class MainWindow(QMainWindow):
         self.worker = None
 
     def export_data(self):
-        """导出数据（Excel 或 CSV），按项目明细行展开"""
+        """导出数据（Excel 合并单元格 / CSV 扁平格式）"""
         success_results = [r for r in self.results if 'error' not in r[0]]
         if not success_results:
             QMessageBox.warning(self, '提示', '没有可导出的数据')
             return
 
-        # 选择导出字段
-        from .export_dialog import FieldSelectDialog
-
-        dlg = FieldSelectDialog(self)
-        if dlg.exec() != QDialog.Accepted:
-            return
-        selected_fields = dlg.selected_fields()
-        if not selected_fields:
-            QMessageBox.warning(self, '提示', '请至少选择一个导出字段')
-            return
+        # CSV 需要选择导出字段
+        is_csv = False
 
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
         folder = self.folder_edit.text() or str(Path.home())
@@ -722,20 +717,35 @@ class MainWindow(QMainWindow):
         if not output_path:
             return
 
-        try:
-            flat_results = flatten_results(success_results)
-            is_csv = output_path.lower().endswith('.csv')
+        is_csv = output_path.lower().endswith('.csv')
 
+        try:
             if is_csv:
+                from .export_dialog import FieldSelectDialog
+
+                dlg = FieldSelectDialog(self)
+                if dlg.exec() != QDialog.Accepted:
+                    return
+                selected_fields = dlg.selected_fields()
+                if not selected_fields:
+                    QMessageBox.warning(self, '提示', '请至少选择一个导出字段')
+                    return
+                flat_results = merge_results(success_results)
                 export_to_csv(flat_results, output_path, fields=selected_fields)
                 btn_text = '打开文件'
+                count_text = f'{len(flat_results)} 条记录（{len(success_results)} 张发票）'
             else:
-                export_to_excel(flat_results, output_path, fields=selected_fields)
+                export_to_excel_grouped(success_results, output_path)
                 btn_text = '打开Excel'
+                # 计算总行数
+                total_rows = sum(1 for d, _ in success_results if not d.get('_items')) + sum(
+                    len(d.get('_items', [{}])) for d, _ in success_results if '_items' in d
+                )
+                count_text = f'{len(success_results)} 张发票，{total_rows} 行明细'
 
             msg = QMessageBox(self)
             msg.setWindowTitle('导出成功')
-            msg.setText(f'已导出 {len(flat_results)} 条记录（{len(success_results)} 张发票）')
+            msg.setText(count_text)
             msg.setInformativeText(str(output_path))
             msg.setIcon(QMessageBox.Information)
 
@@ -778,7 +788,7 @@ class MainWindow(QMainWindow):
         self.act_export.setEnabled(False)
         self.act_clear.setEnabled(False)
         self.status_label.setText('就绪')
-        self.setWindowTitle('数电发票识别工具')
+        self.setWindowTitle('发票识别工具')
 
     def _do_search(self):
         """执行搜索过滤（防抖后调用）"""
@@ -809,10 +819,15 @@ class MainWindow(QMainWindow):
         self.preview_label.show_preview(pdf_path)
 
         if 'error' in data_dict:
+            fname = data_dict.get('文件名', Path(pdf_path).name)
             html = (
                 f'<h3 style="color:#c62828;">识别失败</h3>'
-                f'<p style="color:#757575;">错误信息：</p>'
-                f'<p style="color:#c62828;">{data_dict["error"]}</p>'
+                f'<table>'
+                f'<tr><td style="color:#9e9e9e;padding:2px 12px 2px 0;white-space:nowrap;">文件名</td>'
+                f'<td style="color:#c62828;padding:2px 0;">{fname}</td></tr>'
+                f'<tr><td style="color:#9e9e9e;padding:2px 12px 2px 0;white-space:nowrap;">错误信息</td>'
+                f'<td style="color:#c62828;padding:2px 0;">{data_dict["error"]}</td></tr>'
+                f'</table>'
             )
         else:
             # 基本信息
@@ -835,11 +850,17 @@ class MainWindow(QMainWindow):
             html += '</table>'
 
             # 项目明细
-            items = data_dict.get('_items', [])
-            if items:
+            item_detail = data_dict.get('项目明细', '')
+            if item_detail:
                 html += '<hr style="border:none;border-top:1px solid #eee;margin:12px 0;">'
                 html += '<h3 style="color:#1976d2;margin:0 0 8px 0;">项目明细</h3>'
-                for idx, item in enumerate(items, 1):
+                # 替换换行为 <br> 并保持格式
+                html += f'<pre style="font-family:inherit;font-size:12px;white-space:pre-wrap;color:#424242;margin:0;">{item_detail}</pre>'
+            # 兼容旧数据（尚未合并的 _items）
+            elif data_dict.get('_items'):
+                html += '<hr style="border:none;border-top:1px solid #eee;margin:12px 0;">'
+                html += '<h3 style="color:#1976d2;margin:0 0 8px 0;">项目明细</h3>'
+                for idx, item in enumerate(data_dict['_items'], 1):
                     html += f'<p style="color:#757575;margin:4px 0 2px;font-size:11px;">--- 项目 {idx} ---</p>'
                     html += '<table>'
                     for field_name, key in ITEM_FIELDS:
@@ -861,6 +882,7 @@ class MainWindow(QMainWindow):
 
     def show_donate(self):
         from .donate_dialog import DonateDialog
+
         DonateDialog(self).exec()
 
     def show_about(self):
@@ -872,7 +894,7 @@ class MainWindow(QMainWindow):
         msg.setText(
             f'<h3>{__app_name__}</h3>'
             f'<p>版本: {__version__}</p>'
-            f'<p>用于识别数电发票（PDF格式）并将信息导出到Excel表格。</p>'
+            f'<p>用于识别PDF发票（数电发票/增值税电子普通发票）并将信息导出到Excel表格。</p>'
             f'<hr>'
             f'<p style="color:#757575;font-size:11px;">'
             f'基于 PySide6 + pdfplumber + openpyxl 构建</p>'

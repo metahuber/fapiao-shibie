@@ -20,7 +20,7 @@ class ScanWorker(QThread):
 
     def run(self):
         """在后台线程中运行"""
-        from ..core.parser import process_pdf
+        from ..core.parser_factory import process_pdf
 
         total = len(self.pdf_files)
         if total == 0:

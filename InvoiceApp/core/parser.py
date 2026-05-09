@@ -1,24 +1,34 @@
-"""数电发票 PDF 解析模块 — 通用版"""
+"""数电发票 PDF 解析模块"""
 
 import re
 from pathlib import Path
 
 import pdfplumber
 
-# ==================== 字段定义 ====================
+# ==================== 字段定义（统一） ====================
 
-# 发票基本信息字段
+# 发票基本信息字段（覆盖数电票和普通电子发票的全部字段）
 BASIC_FIELDS = [
     ('文件名', '文件名'),
+    ('发票类型', '发票类型'),
+    ('发票代码', '发票代码'),
     ('发票号码', '发票号码'),
     ('开票日期', '开票日期'),
+    ('机器编号', '机器编号'),
+    ('校验码', '校验码'),
     ('购买方名称', '购买方名称'),
     ('购买方纳税人识别号', '购买方纳税人识别号'),
+    ('购买方地址、电话', '购买方地址电话'),
+    ('购买方开户行及账号', '购买方开户行及账号'),
     ('销售方名称', '销售方名称'),
     ('销售方纳税人识别号', '销售方纳税人识别号'),
+    ('销售方地址、电话', '销售方地址电话'),
+    ('销售方开户行及账号', '销售方开户行及账号'),
     ('价税合计（大写）', '价税合计大写'),
     ('价税合计（小写）', '价税合计'),
     ('备注', '备注'),
+    ('收款人', '收款人'),
+    ('复核', '复核'),
     ('开票人', '开票人'),
 ]
 
@@ -30,26 +40,32 @@ ITEM_FIELDS = [
     ('数量', '数量'),
     ('单价', '单价'),
     ('金额', '金额'),
-    ('税率/征收率', '税率/征收率'),
+    ('税率', '税率'),
     ('税额', '税额'),
 ]
 
 # 导出时使用的完整列定义：基本信息 + 项目明细
 EXPORT_FIELDS = BASIC_FIELDS + ITEM_FIELDS
 
+# 合并模式（每张发票一行，项目明细合并为一个字段）
+MERGE_FIELDS = BASIC_FIELDS + [('项目明细', '项目明细')]
+
 # 列名识别：按优先级从精确到模糊
 COLUMN_MATCHERS = [
     ('项目名称', '项目名称'),
     ('规格型号', '规格型号'),
-    ('税率/征收率', '税率/征收率'),
-    ('征收率', '税率/征收率'),
+    ('货物', '项目名称'),
+    ('应税劳务', '项目名称'),
+    ('服务名称', '项目名称'),
+    ('税率/征收率', '税率'),
+    ('征收率', '税率'),
     ('规格', '规格型号'),
     ('型号', '规格型号'),
     ('单位', '单位'),
     ('数量', '数量'),
     ('单价', '单价'),
     ('金额', '金额'),
-    ('税率', '税率/征收率'),
+    ('税率', '税率'),
     ('税额', '税额'),
 ]
 
@@ -276,7 +292,10 @@ def parse_invoice_text(text):
     # 1. 提取基本信息
     data = _extract_basic_info(text, lines)
 
-    # 2. 提取项目明细
+    # 2. 标记发票类型
+    data['发票类型'] = '数电发票'
+
+    # 3. 提取项目明细
     items = _parse_items_table(lines)
     data['_items'] = items
 
@@ -367,3 +386,40 @@ def flatten_results(results):
                 row.update(item)
                 flat.append((row, pdf_path))
     return flat
+
+
+def merge_results(results):
+    """将解析结果合并为每张发票一行，项目明细合并为一个字段
+
+    Args:
+        results: [(data_dict, pdf_path), ...]
+
+    Returns:
+        [(flat_dict, pdf_path), ...]  # 每张发票一行
+    """
+    merged = []
+    for data, pdf_path in results:
+        if 'error' in data:
+            continue
+        items = data.get('_items', [])
+        row = {k: v for k, v in data.items() if k != '_items'}
+
+        # 项目明细合并为格式化文本
+        if items:
+            parts = []
+            for idx, item in enumerate(items, 1):
+                fields = []
+                name = item.get('项目名称', '')
+                if name:
+                    fields.append(name)
+                for key in ('规格型号', '单位', '数量', '单价', '金额', '税率', '税额'):
+                    val = item.get(key)
+                    if val:
+                        fields.append(f'{key}:{val}')
+                parts.append('  '.join(fields))
+            row['项目明细'] = '\n'.join(parts)
+        else:
+            row['项目明细'] = ''
+
+        merged.append((row, pdf_path))
+    return merged

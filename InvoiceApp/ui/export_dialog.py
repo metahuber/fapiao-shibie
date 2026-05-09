@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..core.parser import BASIC_FIELDS, ITEM_FIELDS
+from ..core.parser import MERGE_FIELDS
 
 
 class FieldSelectDialog(QDialog):
@@ -27,16 +27,8 @@ class FieldSelectDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(4)
 
-        layout.addWidget(QLabel('基本信息'))
-        for display_name, key in BASIC_FIELDS:
-            cb = QCheckBox(display_name)
-            cb.setChecked(True)
-            cb.key = key
-            self._checkboxes.append(cb)
-            layout.addWidget(cb)
-
-        layout.addWidget(QLabel('项目明细'))
-        for display_name, key in ITEM_FIELDS:
+        layout.addWidget(QLabel('导出字段（每张发票一行，项目明细合并）'))
+        for display_name, key in MERGE_FIELDS:
             cb = QCheckBox(display_name)
             cb.setChecked(True)
             cb.key = key
