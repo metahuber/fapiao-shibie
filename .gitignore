@@ -30,6 +30,14 @@ venv/
 # Invoice PDF data
 highway_toll_data/
 
+# Local test data
+测试发票/
+Snipaste_*.png
+
+# Cache
+.pytest_cache/
+.ruff_cache/
+
 # Git hooks (local, not shared)
 .git/hooks/
 
