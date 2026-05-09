@@ -26,12 +26,17 @@ echo [OK]
 :: 2. 制作 Inno Setup 安装包
 echo.
 echo [2/3] 制作安装包中...
-iscc /Q /DMyAppVersion=%VERSION% installer.iss
+
+:: 自动查找 iscc.exe
+if exist "C:\Program Files (x86)\Inno Setup 6\iscc.exe" set ISCC=C:\Program Files (x86)\Inno Setup 6\iscc.exe
+if exist "C:\Program Files\Inno Setup 6\iscc.exe" set ISCC=C:\Program Files\Inno Setup 6\iscc.exe
+if "%ISCC%"=="" set ISCC=iscc
+
+powershell -Command "& '%ISCC%' installer.iss /Q /DMyAppVersion=%VERSION%"
 if %errorlevel% neq 0 (
     echo.
     echo 安装包制作失败！
     echo 请确认已安装 Inno Setup：https://jrsoftware.org/isdl.php
-    echo 安装后请确保 iscc.exe 在 PATH 环境变量中
     pause
     exit /b 1
 )
