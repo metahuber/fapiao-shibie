@@ -4,9 +4,7 @@
 #define MyAppPublisher "陈凡是我"
 #define MyAppExeName "数电发票识别工具.exe"
 
-#ifndef MyAppVersion
-  #define MyAppVersion "1.1.0"
-#endif
+#define MyAppVersion "1.1.0"
 
 [Setup]
 AppName={#MyAppName}

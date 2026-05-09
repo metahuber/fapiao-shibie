@@ -7,8 +7,8 @@ echo  打 包 脚 本
 echo ========================================
 echo.
 
-:: 读取版本号
-python -c "exec(open('InvoiceApp/__init__.py').read()); print(__version__)" > _ver.tmp
+:: 读取版本号（GBK 编码兼容）
+python -c "exec(open('InvoiceApp/__init__.py',encoding='utf-8').read()); print(__version__)" > _ver.tmp
 set /p VERSION=<_ver.tmp
 del _ver.tmp
 echo 版本：%VERSION%
@@ -24,18 +24,21 @@ if %errorlevel% neq 0 (
 )
 echo OK
 
-:: 2. 制作安装包
+:: 2. 制作安装包（用 PowerShell 传参，兼容 Inno Setup 6.7+）
 echo.
 echo [2/3] 制作安装包...
+set ISCC=
 if exist "C:\Program Files (x86)\Inno Setup 6\iscc.exe" (
-    "C:\Program Files (x86)\Inno Setup 6\iscc.exe" installer.iss /Q /DMyAppVersion=%VERSION%
+    set "ISCC=C:\Program Files (x86)\Inno Setup 6\iscc.exe"
+) else if exist "C:\Program Files\Inno Setup 6\iscc.exe" (
+    set "ISCC=C:\Program Files\Inno Setup 6\iscc.exe"
 ) else (
-    if exist "C:\Program Files\Inno Setup 6\iscc.exe" (
-        "C:\Program Files\Inno Setup 6\iscc.exe" installer.iss /Q /DMyAppVersion=%VERSION%
-    ) else (
-        iscc installer.iss /Q /DMyAppVersion=%VERSION%
-    )
+    set ISCC=iscc
 )
+:: 生成带版本号的临时 iss 文件并编译
+python build_iss.py %VERSION%
+"%ISCC%" _installer.iss
+del _installer.iss _installer.iss.bak 2>nul
 if %errorlevel% neq 0 (
     echo 安装包制作失败！
     pause
@@ -47,6 +50,6 @@ echo OK
 echo.
 echo ========================================
 echo 安装包已生成：
-echo dist\Setup_v%VERSION%.exe
+echo dist\数电发票识别工具_Setup_v%VERSION%.exe
 echo ========================================
 pause

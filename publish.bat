@@ -1,16 +1,12 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
+setlocal enabledelayedexpansion
 
 echo ========================================
-echo  发布到 GitHub Releases
+echo  一键打包（PyInstaller + Inno Setup）
 echo ========================================
 echo.
-
-gh --version >nul 2>nul || (
-    echo 请先安装 GitHub CLI：winget install GitHub.cli
-    pause & exit /b 1
-)
 
 :: 版本号
 python -c "exec(open('InvoiceApp/__init__.py').read()); print(__version__)" > _ver.tmp
@@ -18,37 +14,24 @@ set /p VER=<_ver.tmp
 del _ver.tmp
 echo 版本：%VER%
 
-:: 检查安装包
+:: 检查安装包是否已存在
 set INSTALLER=dist\数电发票识别工具_Setup_v%VER%.exe
-if not exist "%INSTALLER%" (
-    echo [运行 build.bat 打包中...]
-    call build.bat
-)
-if not exist "%INSTALLER%" (
-    echo 安装包未找到：%INSTALLER%
-    pause & exit /b 1
+if exist "%INSTALLER%" (
+    echo 安装包已存在：%INSTALLER%
+    set /p REBUILD=重新打包？(y/n):
+    if /i not "!REBUILD!"=="y" echo 跳过打包 & goto :done
 )
 
-:: 确认
-echo 即将发布：%INSTALLER%
-set /p OK=确认？(y/n):
-if /i not "%OK%"=="y" echo 已取消 & pause & exit /b 1
+echo [运行 build.bat 打包中...]
+call build.bat
 
-:: 推送标签
+:done
 echo.
-git tag v%VER% 2>nul
-git push origin v%VER%
-echo [标签已推送]
-
-:: 一步创建 Release + 上传安装包
-echo 发布中...
-gh release create v%VER% "%INSTALLER%" --title "v%VER%" --notes "" 2>nul
-if errorlevel 1 (
-    :: 可能已存在，尝试上传
-    gh release upload v%VER% "%INSTALLER%" --clobber
-)
-
-echo.
-echo 完成！
-echo https://github.com/metahuber/fapiao-shibie/releases/tag/v%VER%
+echo ========================================
+echo 安装包路径：%INSTALLER%
+echo 手动发布到 GitHub Releases：
+echo   1. 打开 https://github.com/metahuber/fapiao-shibie/releases
+echo   2. 点击 "Create a new release"
+echo   3. 上传 %INSTALLER%
+echo ========================================
 pause
