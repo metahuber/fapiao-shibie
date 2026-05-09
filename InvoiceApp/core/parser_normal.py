@@ -104,9 +104,9 @@ def _parse_buyer_seller_cell(cell_text):
         if name:
             data['名称'] = name
 
-    m = re.search(r'纳税人识别号[：:]\s*([\d\w]+)', cell)
+    m = re.search(r'纳税人识别号[：:]\s*([0-9A-Za-z][0-9A-Za-z\s]*[0-9A-Za-z]|[0-9A-Za-z])', cell)
     if m:
-        data['纳税人识别号'] = m.group(1)
+        data['纳税人识别号'] = ''.join(m.group(1).split())
 
     m = re.search(r'地址[、，]?\s*电话[：:]\s*(.*?)(?:\s*(?:开户行|$))', cell)
     if m:
