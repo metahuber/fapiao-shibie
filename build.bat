@@ -7,10 +7,8 @@ echo  数电发票识别工具 — 打包脚本
 echo ========================================
 echo.
 
-:: 读取版本号
-for /f "tokens=2 delims== " %%a in ('type InvoiceApp\__init__.py ^| findstr __version__') do set "VERSION=%%a"
-set "VERSION=%VERSION:'=%"
-set "VERSION=%VERSION: =%"
+:: 用 PowerShell 读取版本号
+for /f %%a in ('powershell -NoProfile -Command "$f=Get-Content InvoiceApp\__init__.py; $f -match '__version__\s*=\s*''(.+?)'''; $Matches[1]"') do set "VERSION=%%a"
 echo 当前版本：%VERSION%
 
 :: 1. PyInstaller 打包
