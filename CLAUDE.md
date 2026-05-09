@@ -82,6 +82,10 @@ python -X utf8 -m InvoiceApp
 # Or double-click
 run_pyside6.bat
 
+# Build installer
+pip install pyinstaller           # 首次安装
+双击 build.bat                     # 生成安装包到 dist/ 目录
+
 # Install dependencies
 pip install PySide6 pdfplumber openpyxl
 
