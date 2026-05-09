@@ -67,9 +67,9 @@ pyproject.toml  # 项目元数据
 ruff.toml       # 代码格式配置
 ```
 
-## 技术栈
+## 下载
 
-Python 3.11+、PySide6、pdfplumber、openpyxl、PyMuPDF（可选）、ruff
+最新版下载地址：https://github.com/metahuber/fapiao-shibie/releases
 
 ## 支持作者
 
