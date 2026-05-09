@@ -395,7 +395,6 @@ def _parse_detail_from_text(text):
     items = []
     lines = text.split('\n')
 
-    # 找表头行
     header_idx = None
     for i, line in enumerate(lines):
         if '货物' in line and '名称' in line and '购买方' not in line and '销售方' not in line:
@@ -409,8 +408,10 @@ def _parse_detail_from_text(text):
     if header_idx is None:
         return items
 
-    # 标准列定义（序号跳过）
-    col_keys = ['规格型号', '单位', '数量', '单价', '金额', '税率', '税额']
+    # 列名（含 序号+名称+规格型号+单位+数量+单价+金额+税率+税额）
+    # 从右往左映射：金额/税率/税额固定，左边列可能因发票格式缺省
+    right_keys = ['金额', '税率', '税额']
+    left_keys = ['规格型号', '单位', '数量', '单价']
 
     for line in lines[header_idx + 1 :]:
         stripped = line.strip()
@@ -422,37 +423,28 @@ def _parse_detail_from_text(text):
         if len(parts) < 2:
             continue
 
-        # 第1部分 = 序号，跳过
-        # 第2部分 = 项目名称
         name = parts[1]
         if re.match(r'^\d+$', name):
             continue
 
         item = {'项目名称': name}
+        rest = parts[2:]  # 去掉序号和项目名称
+        r = len(rest)
 
-        # 剩余部分：从右往左映射到金额/税率/税额，剩下的从左往右映射
-        rest = parts[2:]
-        if not rest:
-            items.append(item)
-            continue
-
-        # 从右往左分配到已知列（金额、税率、税额是最后3列）
-        always_present = 3  # 金额, 税率, 税额
-        right_cols = col_keys[-always_present:]  # ['金额', '税率', '税额']
-        left_cols = col_keys[:-always_present]  # ['规格型号', '单位', '数量', '单价']
-
-        for i, key in enumerate(right_cols):
-            idx = len(rest) - len(right_cols) + i
-            if idx >= 0 and idx < len(rest):
+        # 从右往左分配：金额、税率、税额（一定有）
+        for i, key in enumerate(right_keys):
+            idx = r - len(right_keys) + i
+            if 0 <= idx < r:
                 val = rest[idx]
                 if val and val != '.':
                     item[key] = val
 
-        # 左边的部分映射到 left_cols（多余部分会被截断）
-        left_vals = rest[: max(0, len(rest) - always_present)]
-        for i, key in enumerate(left_cols):
-            if i < len(left_vals):
-                val = left_vals[i]
+        # 剩余中间部分从右往左分配：单价→数量→单位→规格型号
+        middle = r - len(right_keys)  # 金额/税率/税额占用的部分
+        for i, key in enumerate(reversed(left_keys)):
+            idx = middle - 1 - i
+            if idx >= 0:
+                val = rest[idx]
                 if val and val != '.':
                     item[key] = val
 
